@@ -44,6 +44,7 @@ const startApp = async (app, pool) => {
         .catch(e => {
                 console.error('cannot connect to mongodb: ', e)
         })
+
     } catch(e) {
 		console.error('Cannot ping database', e)
 	} finally {
@@ -61,3 +62,65 @@ const pool = mysql.createPool({
 })
 // start the app
 startApp(app, pool)
+
+// get game/:gameid 
+// return {name, year, url, image, reviews[_id...], average_rating}
+
+app.get('/game/:gameID', async (req, resp) => {
+
+    const gameID = parseInt(req.params['gameID'])
+    const conn = await pool.getConnection()
+    
+	try {
+		const [ result, _ ] = await conn.query('select name, year, url, image from game where gid = ?;', [gameID])
+
+        const result2 = await client.db(DATABASE).collection(COLLECTION)
+        .aggregate([
+            {
+                $match: {
+                    ID: gameID
+                }
+            },
+            {
+                $limit: 50
+            },
+            {
+                $group:{                //fields in the new object to be returned
+                    _id: "$ID",
+                    total: {$sum :1},
+                    ratings: {
+                        $push: {
+                                // _id: "$_id",
+                                comment: "$comment",
+                                rating: "$rating"  
+                        }
+                    }
+                }
+            },
+            {
+                // project here
+                $project:{
+                    "ratings.comment": 1,
+                    "ratings.rating": 1,
+                    avg_rating: {$avg: "$ratings.rating"}
+                }
+            }     
+        ])
+        .toArray()
+
+        console.info('result 1: ', result)
+        console.info('result 2: ', result2)
+
+        Object.assign(result[0], result2[0]);
+
+		resp.status(200)
+		resp.type('application/json').send(result[0])
+        
+	} catch(e) {
+		console.error('ERROR: ', e)
+		resp.status(500)
+		resp.end()
+	} finally {
+		conn.release()
+	}
+})

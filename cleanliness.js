@@ -34,7 +34,6 @@ const avgCleanliness = async (propertyType, client) => {
             }
         }     
     ])
-    // .project({avg_cleanliness: {$avg: "$properties.cleanliness"}})
     .toArray()
     console.info(result)
     return result
